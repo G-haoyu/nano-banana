@@ -5,7 +5,11 @@
                 🔑 API 配置
                 <span v-if="modelValue" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">密钥已保存</span>
             </h3>
-            <p class="text-sm text-gray-600">可自定义 API 密钥与端点，默认使用 OpenRouter</p>
+            <p class="text-sm text-gray-600">
+            可自定义 API 密钥与端点，默认使用 
+            <a href="https://ai.analysemusic.com" target="_blank" class="hover:text-blue-500 underline">One Time AI</a> 
+            中转站
+            </p>
         </div>
 
         <div class="space-y-3">
@@ -16,7 +20,7 @@
                         type="password"
                         :value="modelValue"
                         @input="$emit('update:modelValue', ($event.target as HTMLInputElement).value)"
-                        placeholder="输入你的 OpenRouter API 密钥..."
+                        placeholder="输入你的 API 密钥..."
                         class="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                     />
                     <button
@@ -30,7 +34,7 @@
                 </div>
                 <div class="flex items-center justify-between mt-1">
                     <p class="text-xs text-gray-500">
-                        从 <a href="https://openrouter.ai/" target="_blank" class="text-orange-500 hover:underline font-medium">OpenRouter.ai</a> 获取你的 API 密钥
+                        从 <a href="https://ai.analysemusic.com/" target="_blank" class="text-orange-500 hover:underline font-medium">One Time AI</a> 获取你的 API 密钥
                     </p>
                     <p v-if="modelValue" class="text-xs text-green-600 flex items-center gap-1">💾 已自动保存到本地</p>
                 </div>
@@ -43,7 +47,7 @@
                         type="text"
                         :value="endpoint"
                         @input="$emit('update:endpoint', ($event.target as HTMLInputElement).value)"
-                        placeholder="例如 https://openrouter.ai/api/v1/chat/completions"
+                        placeholder="例如 https://ai.analysemusic.com/v1/chat/completions"
                         class="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                     />
                     <button
@@ -55,7 +59,31 @@
                         ♻️
                     </button>
                 </div>
-                <p class="text-xs text-gray-500 mt-1">如果你的模型提供方与 OpenRouter 不同，可在此填写自定义地址</p>
+                <p class="text-xs text-gray-500 mt-1">如果你的模型提供方与 One Time AI 不同，可在此填写自定义地址</p>
+            </div>
+
+            <div>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">重试次数</label>
+                <div class="flex gap-2">
+                    <input
+                        type="number"
+                        min="0"
+                        max="5"
+                        :value="maxRetries"
+                        @input="$emit('update:maxRetries', Number(($event.target as HTMLInputElement).value))"
+                        placeholder="失败重试次数 (0-5)"
+                        class="flex-1 px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                    />
+                    <button
+                        v-if="maxRetries !== DEFAULT_MAX_RETRIES"
+                        @click="resetMaxRetries"
+                        class="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm"
+                        title="恢复默认重试次数"
+                    >
+                        ♻️
+                    </button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">生成失败时的自动重试次数</p>
             </div>
 
             <div>
@@ -99,13 +127,14 @@
 
 <script setup lang="ts">
 import { computed, toRefs } from 'vue'
-import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID } from '../config/api'
+import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID, DEFAULT_MAX_RETRIES } from '../config/api'
 import { LocalStorage } from '../utils/storage'
 import type { ModelOption } from '../types'
 
 const props = defineProps<{
     modelValue: string
     endpoint: string
+    maxRetries: number
     models: ModelOption[]
     model: string
     modelLoading: boolean
@@ -115,23 +144,30 @@ const props = defineProps<{
 const emit = defineEmits<{
     'update:modelValue': [value: string]
     'update:endpoint': [value: string]
+    'update:maxRetries': [value: number]
     'update:model': [value: string]
     'fetch-models': []
     'model-picked': []
 }>()
 
-const { modelValue, endpoint, models, model } = toRefs(props)
+const { modelValue, endpoint, maxRetries, models, model } = toRefs(props)
 
 const clearApiKey = () => {
     LocalStorage.clearApiKey()
     LocalStorage.clearModelId()
+    LocalStorage.clearMaxRetries()
     emit('update:modelValue', '')
     emit('update:model', '')
+    emit('update:maxRetries', DEFAULT_MAX_RETRIES)
 }
 
 const resetEndpoint = () => {
     emit('update:endpoint', DEFAULT_API_ENDPOINT)
     emit('update:model', '')
+}
+
+const resetMaxRetries = () => {
+    emit('update:maxRetries', DEFAULT_MAX_RETRIES)
 }
 
 const isCustomEndpoint = computed(() => endpoint.value !== '' && endpoint.value !== DEFAULT_API_ENDPOINT)

@@ -1,7 +1,7 @@
 import type { ApiModel, GenerateRequest, GenerateResponse, ModelListResponse } from '../types'
 import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID } from '../config/api'
 
-export async function generateImage(request: GenerateRequest, maxRetries: number = 5): Promise<GenerateResponse> {
+export async function generateImage(request: GenerateRequest, maxRetries: number = 1): Promise<GenerateResponse> {
     let lastError: Error | null = null
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -91,9 +91,17 @@ export async function generateImage(request: GenerateRequest, maxRetries: number
                 imageUrl = message.images[0].image_url.url
             }
 
-            // 检查content是否是base64图片
-            if (typeof message.content === 'string' && message.content.startsWith('data:image/')) {
-                imageUrl = message.content
+            // 检查content是否是base64图片或Markdown格式图片
+            if (typeof message.content === 'string') {
+                if (message.content.startsWith('data:image/')) {
+                    imageUrl = message.content
+                } else {
+                    // 尝试解析 Markdown 图片格式 ![alt](url)
+                    const markdownMatch = message.content.match(/!\[.*?\]\((.*?)\)/)
+                    if (markdownMatch && markdownMatch[1]) {
+                        imageUrl = markdownMatch[1]
+                    }
+                }
             }
 
             if (imageUrl) {

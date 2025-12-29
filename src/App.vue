@@ -44,6 +44,7 @@
                     <ApiKeyInput
                         v-model="apiKey"
                         v-model:endpoint="apiEndpoint"
+                        v-model:maxRetries="maxRetries"
                         v-model:model="selectedModel"
                         :models="modelOptions"
                         :model-loading="isFetchingModels"
@@ -185,10 +186,11 @@ import { fetchModels, generateImage } from './services/api'
 import { styleTemplates } from './data/templates'
 import { LocalStorage } from './utils/storage'
 import type { ApiModel, GenerateRequest, ModelOption } from './types'
-import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID } from './config/api'
+import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID, DEFAULT_MAX_RETRIES } from './config/api'
 
 const apiKey = ref('')
 const apiEndpoint = ref('')  // 改为空字符串，避免初始化时触发 watch
+const maxRetries = ref(DEFAULT_MAX_RETRIES)
 const selectedImages = ref<string[]>([])
 const selectedStyle = ref('')
 const customPrompt = ref('')
@@ -217,6 +219,7 @@ onMounted(() => {
     const savedApiKey = LocalStorage.getApiKey()
     const savedEndpoint = LocalStorage.getApiEndpoint()
     const savedModelId = LocalStorage.getModelId()
+    const savedMaxRetries = LocalStorage.getMaxRetries()
 
     if (savedApiKey) {
         apiKey.value = savedApiKey
@@ -236,6 +239,10 @@ onMounted(() => {
     // 设置值（这些赋值会触发 watch，但此时 hasSyncedInitialEndpoint 还是 false）
     selectedModel.value = modelIdToUse
     apiEndpoint.value = endpointToUse
+
+    if (savedMaxRetries !== null) {
+        maxRetries.value = savedMaxRetries
+    }
 
     ensureSelectedOptionPresent()
 
@@ -290,6 +297,18 @@ watch(
                 LocalStorage.clearModelCache(previousTrimmed)
             }
             showApiSettings.value = true
+        }
+    },
+    { immediate: false }
+)
+
+watch(
+    maxRetries,
+    (newValue: number) => {
+        if (newValue !== DEFAULT_MAX_RETRIES) {
+            LocalStorage.saveMaxRetries(newValue)
+        } else {
+            LocalStorage.clearMaxRetries()
         }
     },
     { immediate: false }
@@ -573,7 +592,7 @@ const handleTextToImageGenerate = async () => {
             request.enableGoogleSearch = gemini3EnableGoogleSearch.value
         }
 
-        const response = await generateImage(request)
+        const response = await generateImage(request, maxRetries.value)
         textToImageResult.value = response.imageUrl
         latestResultSource.value = 'text'
     } catch (err) {
@@ -659,7 +678,7 @@ const handleGenerate = async () => {
             request.enableGoogleSearch = gemini3EnableGoogleSearch.value
         }
 
-        const response = await generateImage(request)
+        const response = await generateImage(request, maxRetries.value)
         result.value = response.imageUrl
         latestResultSource.value = 'image'
     } catch (err) {
