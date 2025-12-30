@@ -192,7 +192,7 @@ const emit = defineEmits<{
 
 const { modelValue, endpoint, maxRetries, models, model } = toRefs(props)
 
-const useOAuth = ref(true)
+const useOAuth = ref(false)
 const oauthLoading = ref(false)
 const oauthError = ref<string | null>(null)
 
@@ -227,8 +227,8 @@ const fetchWithRetry = async (url: string, options: RequestInit, retries = 3): P
 const handleOAuthLogin = () => {
     oauthError.value = null
     const state = Math.random().toString(36).substring(7)
-    // 根据反馈，使用 /oauth/callback 作为回调地址
-    const redirectUri = window.location.origin + '/oauth/callback'
+    // 切换回主页回调
+    const redirectUri = window.location.origin + window.location.pathname
     const authUrl = `${OAUTH_AUTH_URL}/oauth?client_id=${OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code`
     
     const width = 600
