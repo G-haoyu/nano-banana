@@ -277,10 +277,14 @@ const handleOAuthLogin = () => {
                     headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
                 })
                 const apiData = await apiResponse.json()
-                if (!apiData.api_key) throw new Error('获取 API Key 失败')
+                
+                // 响应结构: { success: true, data: { id: ..., key: "sk-...", ... } }
+                if (!apiData.success || !apiData.data || !apiData.data.key) {
+                    throw new Error('获取 API Key 失败')
+                }
 
                 // 3. 更新状态
-                emit('update:modelValue', apiData.api_key)
+                emit('update:modelValue', apiData.data.key)
                 emit('update:endpoint', OAUTH_ENDPOINT)
                 
                 // 自动刷新模型列表
