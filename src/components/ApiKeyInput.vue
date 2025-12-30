@@ -1,10 +1,26 @@
 <template>
     <div class="bg-white border-4 border-black rounded-lg p-3 shadow-lg">
         <div class="mb-2">
-            <h3 class="font-bold text-gray-800 flex items-center gap-2 mb-2">
-                🔑 API 配置
-                <span v-if="modelValue" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">密钥已保存</span>
-            </h3>
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-bold text-gray-800 flex items-center gap-2">
+                    🔑 API 配置
+                    <span v-if="modelValue" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">密钥已保存</span>
+                </h3>
+                <!-- OAuth 切换开关 -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-gray-600">自动登录</span>
+                    <button 
+                        @click="toggleOAuth"
+                        class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors focus:outline-none"
+                        :class="useOAuth ? 'bg-orange-500' : 'bg-gray-300'"
+                    >
+                        <span
+                            class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform"
+                            :class="useOAuth ? 'translate-x-6' : 'translate-x-1'"
+                        />
+                    </button>
+                </div>
+            </div>
             <p class="text-sm text-gray-600">
             可自定义 API 密钥与端点，默认使用 
             <a href="https://ai.analysemusic.com" target="_blank" class="hover:text-blue-500 underline">One Time AI</a> 
@@ -13,7 +29,22 @@
         </div>
 
         <div class="space-y-3">
-            <div>
+            <!-- OAuth 登录按钮 -->
+            <div v-if="useOAuth" class="py-2">
+                <button
+                    @click="handleOAuthLogin"
+                    :disabled="oauthLoading"
+                    class="w-full py-3 px-4 bg-gradient-to-r from-orange-400 to-orange-600 text-white font-bold rounded-lg border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-y-0.5 hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all flex items-center justify-center gap-2"
+                >
+                    <span v-if="oauthLoading" class="animate-spin">⏳</span>
+                    <span v-else>🔐</span>
+                    {{ oauthLoading ? '正在登录...' : (modelValue ? '重新授权登录' : '点击授权登录 One Time AI') }}
+                </button>
+                <p v-if="oauthError" class="text-xs text-red-600 mt-2 text-center font-medium">❌ {{ oauthError }}</p>
+                <p v-else-if="modelValue" class="text-xs text-green-600 mt-2 text-center font-medium">✅ 已通过 OAuth 成功授权</p>
+            </div>
+
+            <div v-if="!useOAuth">
                 <label class="block text-xs font-semibold text-gray-600 mb-1">API 密钥</label>
                 <div class="flex gap-2">
                     <input
@@ -40,7 +71,7 @@
                 </div>
             </div>
 
-            <div>
+            <div v-if="!useOAuth">
                 <label class="block text-xs font-semibold text-gray-600 mb-1">API 端点</label>
                 <div class="flex gap-2">
                     <input
@@ -126,8 +157,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, toRefs } from 'vue'
-import { DEFAULT_API_ENDPOINT, DEFAULT_MODEL_ID, DEFAULT_MAX_RETRIES } from '../config/api'
+import { ref, computed, toRefs, onMounted } from 'vue'
+import { 
+    DEFAULT_API_ENDPOINT, 
+    DEFAULT_MODEL_ID, 
+    DEFAULT_MAX_RETRIES,
+    OAUTH_AUTH_URL,
+    OAUTH_API_BASE_URL,
+    OAUTH_CLIENT_ID,
+    OAUTH_CLIENT_SECRET,
+    OAUTH_ENDPOINT
+} from '../config/api'
 import { LocalStorage } from '../utils/storage'
 import type { ModelOption } from '../types'
 
@@ -151,6 +191,122 @@ const emit = defineEmits<{
 }>()
 
 const { modelValue, endpoint, maxRetries, models, model } = toRefs(props)
+
+const useOAuth = ref(true)
+const oauthLoading = ref(false)
+const oauthError = ref<string | null>(null)
+
+onMounted(() => {
+    useOAuth.value = LocalStorage.getUseOAuth()
+})
+
+const toggleOAuth = () => {
+    useOAuth.value = !useOAuth.value
+    LocalStorage.saveUseOAuth(useOAuth.value)
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+const fetchWithRetry = async (url: string, options: RequestInit, retries = 3): Promise<Response> => {
+    try {
+        const response = await fetch(url, options)
+        if (!response.ok && retries > 0) {
+            await sleep(1000)
+            return fetchWithRetry(url, options, retries - 1)
+        }
+        return response
+    } catch (err) {
+        if (retries > 0) {
+            await sleep(1000)
+            return fetchWithRetry(url, options, retries - 1)
+        }
+        throw err
+    }
+}
+
+const handleOAuthLogin = () => {
+    oauthError.value = null
+    const state = Math.random().toString(36).substring(7)
+    // 根据反馈，使用 /oauth/callback 作为回调地址
+    const redirectUri = window.location.origin + '/oauth/callback'
+    const authUrl = `${OAUTH_AUTH_URL}/oauth?client_id=${OAUTH_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code`
+    
+    const width = 600
+    const height = 700
+    const left = (window.screen.width - width) / 2
+    const top = (window.screen.height - height) / 2
+    
+    const authWindow = window.open(
+        authUrl, 
+        'OAuthLogin', 
+        `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes,scrollbars=yes`
+    )
+
+    if (!authWindow) {
+        oauthError.value = '弹出窗口被屏蔽，请允许弹出窗口后重试'
+        return
+    }
+
+    const messageListener = async (event: MessageEvent) => {
+        // 验证来源
+        if (event.origin !== window.location.origin) return
+        
+        if (event.data && event.data.type === 'OAUTH_CODE') {
+            const { code } = event.data
+            window.removeEventListener('message', messageListener)
+            authWindow.close()
+            
+            oauthLoading.value = true
+            try {
+                // 1. 换取 Token
+                const tokenResponse = await fetchWithRetry(`${OAUTH_API_BASE_URL}/oauth/token`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        client_id: OAUTH_CLIENT_ID,
+                        client_secret: OAUTH_CLIENT_SECRET,
+                        code: code
+                    })
+                })
+                const tokenData = await tokenResponse.json()
+                if (!tokenData.access_token) throw new Error('获取 access_token 失败')
+
+                // 2. 获取用户信息 (API Key)
+                const apiResponse = await fetchWithRetry(`${OAUTH_API_BASE_URL}/api`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+                })
+                const apiData = await apiResponse.json()
+                if (!apiData.api_key) throw new Error('获取 API Key 失败')
+
+                // 3. 更新状态
+                emit('update:modelValue', apiData.api_key)
+                emit('update:endpoint', OAUTH_ENDPOINT)
+                
+                // 自动刷新模型列表
+                setTimeout(() => {
+                    emit('fetch-models')
+                }, 100)
+            } catch (err: any) {
+                oauthError.value = err.message || '授权过程出错'
+            } finally {
+                oauthLoading.value = false
+            }
+        }
+    }
+
+    window.addEventListener('message', messageListener)
+
+    const checkWindow = setInterval(() => {
+        if (authWindow.closed) {
+            clearInterval(checkWindow)
+            // 延迟一点时间清理，以防 message 先到
+            setTimeout(() => {
+                window.removeEventListener('message', messageListener)
+            }, 1000)
+        }
+    }, 1000)
+}
 
 const clearApiKey = () => {
     LocalStorage.clearApiKey()

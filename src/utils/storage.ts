@@ -7,6 +7,28 @@ export class LocalStorage {
     private static readonly MODEL_ID = 'nano-banana-model-id'
     private static readonly MODEL_CACHE = 'nano-banana-model-cache'
     private static readonly MAX_RETRIES = 'nano-banana-max-retries'
+    private static readonly USE_OAUTH = 'nano-banana-use-oauth'
+
+    // 保存是否使用 OAuth
+    static saveUseOAuth(useOAuth: boolean): void {
+        try {
+            localStorage.setItem(this.USE_OAUTH, String(useOAuth))
+        } catch (error) {
+            console.warn('无法保存 OAuth 使用状态到本地存储:', error)
+        }
+    }
+
+    // 获取是否使用 OAuth
+    static getUseOAuth(): boolean {
+        try {
+            const value = localStorage.getItem(this.USE_OAUTH)
+            // 如果没有设置过，默认为 true
+            return value === null ? true : value === 'true'
+        } catch (error) {
+            console.warn('无法从本地存储读取 OAuth 使用状态:', error)
+            return true
+        }
+    }
 
     // 保存API密钥
     static saveApiKey(apiKey: string): void {
